@@ -1,28 +1,26 @@
 ﻿using SProjectClient.NET.IO;
 using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Data;
-using System.Drawing;
-using System.Linq;
+using System.IO;
 using System.Net.Sockets;
-using System.Security.Cryptography.X509Certificates;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.StartPanel;
 
 namespace SProjectClient
 {
     public partial class Form1 : Form
     {
-        public PacketReader PacketReader;
+        public PacketReader _packetReader;
         private static TcpClient _client;
 
+        private int p;
+        private int g;
+        private double clientPrivateKey;
+        private double clientPublicKey;
+        private double serverPublicKey;
+        private int sharedKey;
         private byte[] masterKey;
-        private ECDiffieHellmanCng ecdh;
 
         public Form1()
         {
@@ -37,18 +35,8 @@ namespace SProjectClient
             try
             {
                 _client.Connect(ipBox.Text, int.Parse(portBox.Text));
-                PacketReader = new PacketReader(_client.GetStream());
+                _packetReader = new PacketReader(_client.GetStream());
                 process();
-
-                ecdh = new ECDiffieHellmanCng();
-                ecdh.KeyDerivationFunction = ECDiffieHellmanKeyDerivationFunction.Hash;
-                ecdh.HashAlgorithm = CngAlgorithm.Sha256;
-                byte[] publicKey = ecdh.PublicKey.ToByteArray();
-
-                PacketBuilder certPacket = new PacketBuilder();
-                certPacket.WriteOpCode(1);
-                certPacket.WritePublicKey(publicKey);
-                _client.Client.Send(certPacket.GetPacketBytes());
 
                 connectServerButton.Enabled = false;
                 ipBox.Enabled = false;
@@ -57,7 +45,7 @@ namespace SProjectClient
             }
             catch
             {
-                MessageBox.Show("Failed to connect to server");
+                MessageBox.Show("Sunucuya bağlanılamadı");
             }
         }
 
@@ -67,25 +55,44 @@ namespace SProjectClient
             {
                 while (true)
                 {
-                    var opcode = PacketReader.ReadByte();
+                    var opcode = _packetReader.ReadByte();
                     switch (opcode)
                     {
-                        case 99:
-                            var otherPublicKey = PacketReader.ReadPublicKey();
-                            masterKey = ecdh.DeriveKeyMaterial(CngKey.Import(otherPublicKey, CngKeyBlobFormat.EccPublicBlob));
+                        case 0:
+                            p = int.Parse(_packetReader.ReadMessage());
+                            g = int.Parse(_packetReader.ReadMessage());
+                            serverPublicKey = int.Parse(_packetReader.ReadMessage());
+
+                            Random rnd = new Random();
+                            clientPrivateKey = rnd.Next(1, 10);
+                            
+                            clientPublicKey = (int)Math.Pow(g, clientPrivateKey) % p;
+
+                            PacketBuilder keyPacket = new PacketBuilder();
+                            keyPacket.WriteOpCode(0);
+                            keyPacket.WriteMessage(clientPublicKey.ToString());
+                            _client.Client.Send(keyPacket.GetPacketBytes());
+
+                            sharedKey = (int)Math.Pow(serverPublicKey, clientPrivateKey) % p;
+                            byte[] doubleBytes = BitConverter.GetBytes(sharedKey);
+                            using (SHA256 sha256 = SHA256.Create())
+                            {
+                                masterKey = sha256.ComputeHash(doubleBytes);
+                            }
 
                             console.Invoke(new Action(() =>
                             {
-                                console.Text += "masterkey: "+ BitConverter.ToString(masterKey).Replace("-", "") + "\n";
+                                console.Text += "sharedKey: " + sharedKey + "\n";
+                                console.Text += "Ana anahtar: " + BitConverter.ToString(masterKey).Replace("-", "") + "\n";
                             }));
 
-                            PacketBuilder pb = new PacketBuilder();
-                            pb.WriteOpCode(0);
-                            pb.WriteMessage(nameBox.Text);
-                            _client.Client.Send(pb.GetPacketBytes());
+                            PacketBuilder username = new PacketBuilder();
+                            username.WriteOpCode(1);
+                            username.WriteMessage(Convert.ToBase64String(EncryptStringToBytes_Aes(nameBox.Text, masterKey)));
+                            _client.Client.Send(username.GetPacketBytes());
                             break;
-                        case 0:
-                            var status = PacketReader.ReadMessage();
+                        case 1:
+                            var status = DecryptStringFromBytes_Aes(Convert.FromBase64String(_packetReader.ReadMessage()), masterKey);
                             if (status == "false")
                             {
                                 console.Invoke(new Action(() =>
@@ -109,126 +116,167 @@ namespace SProjectClient
                                 }));
                             }
                             break;
-                        case 1:
-                            var connecteduser = PacketReader.ReadMessage();
-                            if (!users.Items.Contains(connecteduser))
+                        case 2:
+                            var connectedUser = DecryptStringFromBytes_Aes(Convert.FromBase64String(_packetReader.ReadMessage()), masterKey);
+                            if (!users.Items.Contains(connectedUser))
                             {
-                                if(connecteduser != null || connecteduser != "")
+                                if (connectedUser != null || connectedUser != "")
                                 {
                                     users.Invoke(new Action(() =>
                                     {
-                                        users.Items.Add(connecteduser);
+                                        users.Items.Add(connectedUser);
                                     }));
                                     console.Invoke(new Action(() =>
                                     {
-                                        console.Text += connecteduser + " connected\n";
+                                        console.Text += connectedUser + " connected\n";
                                     }));
                                 }
                             }
                             break;
-                        case 2:
-                            var disconnecteduser = PacketReader.ReadMessage();
-                            if (users.Items.Contains(disconnecteduser))
+                        case 3:
+                            var disconnectedUser = DecryptStringFromBytes_Aes(Convert.FromBase64String(_packetReader.ReadMessage()), masterKey);
+                            if (users.Items.Contains(disconnectedUser))
                             {
                                 users.Invoke(new Action(() =>
                                 {
-                                    users.Items.Remove(disconnecteduser);
+                                    users.Items.Remove(disconnectedUser);
                                 }));
                                 console.Invoke(new Action(() =>
                                 {
-                                    console.Text += disconnecteduser + " disconnected\n";
+                                    console.Text += disconnectedUser + " disconnected\n";
                                 }));
                             }
                             break;
-                        case 5:
-                            var msg = PacketReader.ReadMessage();
-                            MessageBox.Show(msg);
+                        case 4:
+                            var message = DecryptStringFromBytes_Aes(Convert.FromBase64String(_packetReader.ReadMessage()), masterKey);
                             console.Invoke(new Action(() =>
                             {
-                                console.Invoke(new Action(() =>
-                                {
-                                    console.Text += msg + "\n";
-                                }));
+                                console.Text += message + "\n";
                             }));
                             break;
-
                     }
                 }
             });
         }
 
+        #region UI Bileşenleri
         private void sendButton_Click(object sender, EventArgs e)
         {
             if (users.SelectedItems != null)
             {
                 console.Invoke(new Action(() =>
                 {
+                    console.Text += "şifreli hali = " + Convert.ToBase64String(EncryptStringToBytes_Aes(nameBox.Text + " -> " + users.SelectedItem + " : " + messageBox.Text, masterKey)) + "\n";
                     console.Text += users.SelectedItem + " -> " + nameBox.Text + " : " + messageBox.Text + "\n";
                 }));
                 if (messageBox.Text.Length > 0)
                 {
                     PacketBuilder pb = new PacketBuilder();
-                    pb.WriteOpCode(5);
-                    pb.WriteMessage(users.SelectedItem.ToString());
-                    pb.WriteMessage(nameBox.Text + " -> " + users.SelectedItem.ToString() + " : " + messageBox.Text);
+                    pb.WriteOpCode(4);
+                    pb.WriteMessage(Convert.ToBase64String(EncryptStringToBytes_Aes(users.SelectedItem.ToString(), masterKey)));
+                    pb.WriteMessage(Convert.ToBase64String(EncryptStringToBytes_Aes(nameBox.Text + " -> " + users.SelectedItem + " : " + messageBox.Text, masterKey)));
                     _client.Client.Send(pb.GetPacketBytes());
                 }
                 messageBox.Text = "";
             }
-            
         }
 
         private void ipBox_TextChanged(object sender, EventArgs e)
         {
-            if(portBox.Text.Length > 0 && ipBox.Text.Length > 0 && nameBox.Text.Length > 0)
-            {
-                connectServerButton.Enabled = true;
-            }
-            else
-            {
-                connectServerButton.Enabled = false;
-            }
+            connectServerButton.Enabled = ipBox.Text.Length > 0 && portBox.Text.Length > 0 && nameBox.Text.Length > 0;
         }
 
         private void portBox_TextChanged(object sender, EventArgs e)
         {
-            if(portBox.Text.Length > 0 && ipBox.Text.Length > 0 && nameBox.Text.Length > 0)
-            {
-                connectServerButton.Enabled = true;
-            }
-            else
-            {
-                connectServerButton.Enabled = false;
-            }
+            connectServerButton.Enabled = ipBox.Text.Length > 0 && portBox.Text.Length > 0 && nameBox.Text.Length > 0;
         }
 
         private void nameBox_TextChanged(object sender, EventArgs e)
         {
-            if (portBox.Text.Length > 0 && ipBox.Text.Length > 0 && nameBox.Text.Length > 0)
-            {
-                connectServerButton.Enabled = true;
-            }
-            else
-            {
-                connectServerButton.Enabled = false;
-            }
-        }
-
-        private void groupBox1_Enter(object sender, EventArgs e)
-        {
-
+            connectServerButton.Enabled = ipBox.Text.Length > 0 && portBox.Text.Length > 0 && nameBox.Text.Length > 0;
         }
 
         private void users_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if(users.SelectedItem != null)
+            sendButton.Enabled = users.SelectedItem != null;
+        }
+        #endregion
+
+        #region encryption and decryption
+        static byte[] EncryptStringToBytes_Aes(string plainText, byte[] key)
+        {
+            byte[] encrypted;
+
+            using (Aes aesAlg = Aes.Create())
             {
-                sendButton.Enabled = true;
-            }
-            else
-            {
-                sendButton.Enabled = false;
+                aesAlg.Key = key;
+                aesAlg.Mode = CipherMode.CBC; // Cipher Block Chaining
+                aesAlg.Padding = PaddingMode.PKCS7; // PKCS7 padding
+
+                // IV (Initialization Vector) oluştur
+                aesAlg.GenerateIV();
+
+                // IV'yi şifrelenmiş metnin başına ekleyerek kaydet
+                byte[] iv = aesAlg.IV;
+
+                using (ICryptoTransform encryptor = aesAlg.CreateEncryptor(aesAlg.Key, aesAlg.IV))
+                {
+                    using (MemoryStream msEncrypt = new MemoryStream())
+                    {
+                        using (CryptoStream csEncrypt = new CryptoStream(msEncrypt, encryptor, CryptoStreamMode.Write))
+                        {
+                            using (StreamWriter swEncrypt = new StreamWriter(csEncrypt))
+                            {
+                                // Metni şifrele
+                                swEncrypt.Write(plainText);
+                            }
+                            encrypted = msEncrypt.ToArray();
+                        }
+                    }
+                }
+
+                // IV'yi şifrelenmiş metnin başına ekleyerek kaydet
+                byte[] result = new byte[iv.Length + encrypted.Length];
+                Buffer.BlockCopy(iv, 0, result, 0, iv.Length);
+                Buffer.BlockCopy(encrypted, 0, result, iv.Length, encrypted.Length);
+                return result;
             }
         }
+
+        static string DecryptStringFromBytes_Aes(byte[] cipherText, byte[] key)
+        {
+            // İlk 16 byte IV, geri kalanı şifrelenmiş metin
+            byte[] iv = new byte[16];
+            byte[] cipher = new byte[cipherText.Length - 16];
+            Buffer.BlockCopy(cipherText, 0, iv, 0, iv.Length);
+            Buffer.BlockCopy(cipherText, iv.Length, cipher, 0, cipher.Length);
+
+            string plaintext = null;
+
+            using (Aes aesAlg = Aes.Create())
+            {
+                aesAlg.Key = key;
+                aesAlg.IV = iv;
+                aesAlg.Mode = CipherMode.CBC;
+                aesAlg.Padding = PaddingMode.PKCS7;
+
+                using (ICryptoTransform decryptor = aesAlg.CreateDecryptor(aesAlg.Key, aesAlg.IV))
+                {
+                    using (MemoryStream msDecrypt = new MemoryStream(cipher))
+                    {
+                        using (CryptoStream csDecrypt = new CryptoStream(msDecrypt, decryptor, CryptoStreamMode.Read))
+                        {
+                            using (StreamReader srDecrypt = new StreamReader(csDecrypt))
+                            {
+                                plaintext = srDecrypt.ReadToEnd();
+                            }
+                        }
+                    }
+                }
+            }
+
+            return plaintext;
+        }
+        #endregion
     }
 }
