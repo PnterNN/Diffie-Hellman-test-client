@@ -2,6 +2,7 @@
 using System;
 using System.IO;
 using System.Net.Sockets;
+using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -14,12 +15,12 @@ namespace SProjectClient
         public PacketReader _packetReader;
         private static TcpClient _client;
 
-        private int p;
-        private int g;
-        private double clientPrivateKey;
-        private double clientPublicKey;
-        private double serverPublicKey;
-        private int sharedKey;
+        private BigInteger p;
+        private BigInteger g;
+        private BigInteger clientPrivateKey;
+        private BigInteger clientPublicKey;
+        private BigInteger serverPublicKey;
+        private BigInteger sharedKey;
         private byte[] masterKey;
 
         public Form1()
@@ -27,6 +28,7 @@ namespace SProjectClient
             InitializeComponent();
             connectServerButton.Enabled = false;
             sendButton.Enabled = false;
+            sendButton2.Enabled = false;
             _client = new TcpClient();
         }
 
@@ -59,22 +61,32 @@ namespace SProjectClient
                     switch (opcode)
                     {
                         case 0:
-                            p = int.Parse(_packetReader.ReadMessage());
-                            g = int.Parse(_packetReader.ReadMessage());
-                            serverPublicKey = int.Parse(_packetReader.ReadMessage());
+                            p = BigInteger.Parse(_packetReader.ReadMessage());
+                            g = BigInteger.Parse(_packetReader.ReadMessage());
+                            serverPublicKey = BigInteger.Parse(_packetReader.ReadMessage());
 
                             Random rnd = new Random();
-                            clientPrivateKey = rnd.Next(1, 10);
+                           
+                            clientPrivateKey = rnd.Next(100, 10000);
                             
-                            clientPublicKey = (int)Math.Pow(g, clientPrivateKey) % p;
+                            clientPublicKey = BigInteger.ModPow(p, clientPrivateKey, g);
+                            console.Invoke(new Action(() =>
+                            {
+                                console.Text += "p: " + p + "\n";
+                                console.Text += "g: " + g + "\n";
+                                console.Text += "clientPrivateKey: " + clientPrivateKey + "\n";
+                                console.Text += "serverPublicKey: " + serverPublicKey + "\n";
+                                console.Text += "clientPublicKey: " + clientPublicKey + "\n";
+                            }));
+
 
                             PacketBuilder keyPacket = new PacketBuilder();
                             keyPacket.WriteOpCode(0);
                             keyPacket.WriteMessage(clientPublicKey.ToString());
                             _client.Client.Send(keyPacket.GetPacketBytes());
 
-                            sharedKey = (int)Math.Pow(serverPublicKey, clientPrivateKey) % p;
-                            byte[] doubleBytes = BitConverter.GetBytes(sharedKey);
+                            sharedKey = BigInteger.ModPow(serverPublicKey, clientPrivateKey, g);
+                            byte[] doubleBytes = sharedKey.ToByteArray();
                             using (SHA256 sha256 = SHA256.Create())
                             {
                                 masterKey = sha256.ComputeHash(doubleBytes);
@@ -154,6 +166,13 @@ namespace SProjectClient
                                 console.Text += message + "\n";
                             }));
                             break;
+                        case 5:
+                            var message2 = _packetReader.ReadMessage();
+                            console.Invoke(new Action(() =>
+                            {
+                                console.Text += message2 + "\n";
+                            }));
+                            break;
                     }
                 }
             });
@@ -166,8 +185,7 @@ namespace SProjectClient
             {
                 console.Invoke(new Action(() =>
                 {
-                    console.Text += "şifreli hali = " + Convert.ToBase64String(EncryptStringToBytes_Aes(nameBox.Text + " -> " + users.SelectedItem + " : " + messageBox.Text, masterKey)) + "\n";
-                    console.Text += users.SelectedItem + " -> " + nameBox.Text + " : " + messageBox.Text + "\n";
+                    console.Text += nameBox.Text + " -> " + users.SelectedItem + " : " + messageBox.Text + "\n";
                 }));
                 if (messageBox.Text.Length > 0)
                 {
@@ -199,6 +217,7 @@ namespace SProjectClient
         private void users_SelectedIndexChanged(object sender, EventArgs e)
         {
             sendButton.Enabled = users.SelectedItem != null;
+            sendButton2.Enabled = users.SelectedItem != null;
         }
         #endregion
 
@@ -278,5 +297,25 @@ namespace SProjectClient
             return plaintext;
         }
         #endregion
+
+        private void sendButton2_Click(object sender, EventArgs e)
+        {
+            if (users.SelectedItems != null)
+            {
+                console.Invoke(new Action(() =>
+                {
+                    console.Text += nameBox.Text+ " -> " + users.SelectedItem + " : " + messageBox.Text + "\n";
+                }));
+                if (messageBox.Text.Length > 0)
+                {
+                    PacketBuilder pb = new PacketBuilder();
+                    pb.WriteOpCode(5);
+                    pb.WriteMessage(users.SelectedItem.ToString());
+                    pb.WriteMessage(nameBox.Text + " -> " + users.SelectedItem + " : " + messageBox.Text);
+                    _client.Client.Send(pb.GetPacketBytes());
+                }
+                messageBox.Text = "";
+            }
+        }
     }
 }

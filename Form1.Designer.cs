@@ -33,15 +33,16 @@
             this.messageBox = new System.Windows.Forms.TextBox();
             this.console = new System.Windows.Forms.RichTextBox();
             this.groupBox1 = new System.Windows.Forms.GroupBox();
+            this.label3 = new System.Windows.Forms.Label();
+            this.nameBox = new System.Windows.Forms.TextBox();
             this.ipBox = new System.Windows.Forms.TextBox();
             this.label2 = new System.Windows.Forms.Label();
             this.connectServerButton = new System.Windows.Forms.Button();
             this.label1 = new System.Windows.Forms.Label();
             this.portBox = new System.Windows.Forms.TextBox();
-            this.nameBox = new System.Windows.Forms.TextBox();
-            this.label3 = new System.Windows.Forms.Label();
             this.groupBox3 = new System.Windows.Forms.GroupBox();
             this.users = new System.Windows.Forms.ListBox();
+            this.sendButton2 = new System.Windows.Forms.Button();
             this.groupBox2.SuspendLayout();
             this.groupBox1.SuspendLayout();
             this.groupBox3.SuspendLayout();
@@ -49,6 +50,7 @@
             // 
             // groupBox2
             // 
+            this.groupBox2.Controls.Add(this.sendButton2);
             this.groupBox2.Controls.Add(this.sendButton);
             this.groupBox2.Controls.Add(this.messageBox);
             this.groupBox2.Location = new System.Drawing.Point(12, 359);
@@ -64,7 +66,7 @@
             this.sendButton.Name = "sendButton";
             this.sendButton.Size = new System.Drawing.Size(185, 24);
             this.sendButton.TabIndex = 2;
-            this.sendButton.Text = "Send Message";
+            this.sendButton.Text = "Send Message (Encrypted)";
             this.sendButton.UseVisualStyleBackColor = true;
             this.sendButton.Click += new System.EventHandler(this.sendButton_Click);
             // 
@@ -98,6 +100,24 @@
             this.groupBox1.TabIndex = 4;
             this.groupBox1.TabStop = false;
             this.groupBox1.Text = "Settings";
+            // 
+            // label3
+            // 
+            this.label3.AutoSize = true;
+            this.label3.Location = new System.Drawing.Point(12, 31);
+            this.label3.Name = "label3";
+            this.label3.Size = new System.Drawing.Size(46, 16);
+            this.label3.TabIndex = 5;
+            this.label3.Text = "NAME";
+            // 
+            // nameBox
+            // 
+            this.nameBox.Location = new System.Drawing.Point(73, 25);
+            this.nameBox.MaxLength = 99;
+            this.nameBox.Name = "nameBox";
+            this.nameBox.Size = new System.Drawing.Size(121, 22);
+            this.nameBox.TabIndex = 4;
+            this.nameBox.TextChanged += new System.EventHandler(this.nameBox_TextChanged);
             // 
             // ipBox
             // 
@@ -145,24 +165,6 @@
             this.portBox.TabIndex = 0;
             this.portBox.TextChanged += new System.EventHandler(this.portBox_TextChanged);
             // 
-            // nameBox
-            // 
-            this.nameBox.Location = new System.Drawing.Point(73, 25);
-            this.nameBox.MaxLength = 99;
-            this.nameBox.Name = "nameBox";
-            this.nameBox.Size = new System.Drawing.Size(121, 22);
-            this.nameBox.TabIndex = 4;
-            this.nameBox.TextChanged += new System.EventHandler(this.nameBox_TextChanged);
-            // 
-            // label3
-            // 
-            this.label3.AutoSize = true;
-            this.label3.Location = new System.Drawing.Point(12, 31);
-            this.label3.Name = "label3";
-            this.label3.Size = new System.Drawing.Size(46, 16);
-            this.label3.TabIndex = 5;
-            this.label3.Text = "NAME";
-            // 
             // groupBox3
             // 
             this.groupBox3.Controls.Add(this.users);
@@ -184,6 +186,16 @@
             this.users.Size = new System.Drawing.Size(188, 132);
             this.users.TabIndex = 0;
             this.users.SelectedIndexChanged += new System.EventHandler(this.users_SelectedIndexChanged);
+            // 
+            // sendButton2
+            // 
+            this.sendButton2.Location = new System.Drawing.Point(206, 49);
+            this.sendButton2.Name = "sendButton2";
+            this.sendButton2.Size = new System.Drawing.Size(185, 24);
+            this.sendButton2.TabIndex = 3;
+            this.sendButton2.Text = "Send Message";
+            this.sendButton2.UseVisualStyleBackColor = true;
+            this.sendButton2.Click += new System.EventHandler(this.sendButton2_Click);
             // 
             // Form1
             // 
@@ -223,6 +235,7 @@
         private System.Windows.Forms.TextBox nameBox;
         private System.Windows.Forms.GroupBox groupBox3;
         private System.Windows.Forms.ListBox users;
+        private System.Windows.Forms.Button sendButton2;
     }
 }
 
