@@ -1,4 +1,5 @@
-﻿using System;
+﻿using SProjectServer.Util;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -24,6 +25,14 @@ namespace SProjectClient.NET.IO
             _ms.Write(lengthBytes, 0, lengthBytes.Length);
             _ms.Write(messageBytes, 0, messageBytes.Length);
         }
+        public void WriteEncryptedMessage(string msg, byte[] masterKey)
+        {
+            byte[] encryptedBytes = AesUtil.EncryptStringToBytes_Aes(msg, masterKey);
+            byte[] lengthBytes = BitConverter.GetBytes(encryptedBytes.Length);
+            _ms.Write(lengthBytes, 0, lengthBytes.Length);
+            _ms.Write(encryptedBytes, 0, encryptedBytes.Length);
+        }
+
         public void WriteOpCode(byte opcode)
         {
             _ms.WriteByte(opcode);
